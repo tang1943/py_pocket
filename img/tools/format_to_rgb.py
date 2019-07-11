@@ -8,6 +8,7 @@ from PIL import Image
 import os
 import shutil
 import argparse
+import warnings
 
 
 def main():
@@ -28,7 +29,21 @@ def main():
 
     files = glob.glob(os.path.join(target_dir, '*'))
     for f in files:
-        img = Image.open(f)
+        remove_exif_info = False
+        with warnings.catch_warnings():
+            try:
+                img = Image.open(f)
+                img.load()
+            except UserWarning as w:
+                print(f, w)
+                remove_exif_info = True
+            except Exception as e:
+                print(f, e)
+                if trash_dir:
+                    shutil.move(f, os.path.join(trash_dir, f.split('/')[-1]))
+                else:
+                    os.remove(f)
+                continue
         if img.mode == 'RGBA':
             new_img = Image.new('RGB', img.size, (255, 255, 255))
             new_img.paste(img, mask=img.split()[3])
@@ -41,6 +56,13 @@ def main():
                 shutil.move(f, os.path.join(trash_dir, f.split('/')[-1]))
             save_file = f if not change_ext else f[:f.rindex('.')] + '.jpg'
             img.convert('RGB').save(save_file, 'JPEG', quality=80)
+        elif remove_exif_info and 'exif' in img.info:
+            new_img = Image.new(img.mode, img.size)
+            new_img.putdata(list(img.getdata()))
+            if trash_dir:
+                shutil.move(f, os.path.join(trash_dir, f.split('/')[-1]))
+            save_file = f if not change_ext else f[:f.rindex('.')] + '.jpg'
+            new_img.save(save_file, 'JPEG', quality=80)
 
 
 if __name__ == '__main__':
